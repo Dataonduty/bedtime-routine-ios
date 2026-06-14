@@ -1,0 +1,14 @@
+node_modules/
+ios/App/build/
+ios/App/DerivedData/
+ios/App/Pods/
+ios/App/output/
+*.ipa
+*.xcarchive
+.DS_Store
+build/
+DerivedData/
+*.p8
+*.p12
+*.mobileprovision
+ExportOptions.local.plist

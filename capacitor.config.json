@@ -1,0 +1,22 @@
+{
+  "appId": "io.github.dataonduty.bedtimeroutine",
+  "appName": "Bedtime Routine",
+  "webDir": "www",
+  "backgroundColor": "#0b1026",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0b1026"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "backgroundColor": "#0b1026",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0b1026",
+      "overlaysWebView": true
+    }
+  }
+}
