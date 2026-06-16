@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Bedtime Routine</string>
+    <string name="title_activity_main">Bedtime Routine</string>
+    <string name="package_name">io.github.dataonduty.bedtimeroutine</string>
+    <string name="custom_url_scheme">io.github.dataonduty.bedtimeroutine</string>
+</resources>

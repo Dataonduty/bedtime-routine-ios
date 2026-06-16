@@ -4,6 +4,7 @@
   "private": true,
   "description": "iOS wrapper (Capacitor) for Bedtime Routine PWA",
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
     "@capacitor/cli": "^8.4.0",
     "@capacitor/core": "^8.4.0",
     "@capacitor/haptics": "^8.0.2",
