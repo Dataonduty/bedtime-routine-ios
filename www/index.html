@@ -131,6 +131,21 @@
           <span class="name">🌐&nbsp; <span id="lblLang">Langue</span></span>
           <select id="langSelect" class="select"></select>
         </label>
+
+        <h3 class="sec" id="secBedtime">Coucher</h3>
+        <label class="srow">
+          <span class="name">⏰&nbsp; <span id="lblBedtime">Heure du coucher</span></span>
+          <input type="time" id="bedtimeInput" class="time-input" value="20:00">
+        </label>
+        <label class="srow reminder-row">
+          <span class="col">
+            <span class="ttl">🛎️&nbsp; <span id="lblReminder">Me prévenir 15 min avant</span></span>
+            <span id="reminderSub" class="row-sub"></span>
+          </span>
+          <input type="checkbox" id="reminderToggle" class="switch">
+        </label>
+        <p id="reminderHint" class="reminder-hint" hidden></p>
+
         <a id="kofiSettings" class="btn-ghost kofi-btn" target="_blank" rel="noopener" hidden>☕ Soutenir l'app</a>
       </div>
     </section>

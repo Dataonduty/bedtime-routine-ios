@@ -576,6 +576,40 @@
     } },
   };
 
+  // Clés « Coucher » (heure de début + rappel), fusionnées dans I18N ci-dessus
+  const I18N_BEDTIME = {
+    fr: { bedtimeSection: 'Coucher', bedtimeLabel: 'Heure du coucher', reminderLabel: 'Me prévenir 15 min avant', reminderAt: 'Notification à {time}', reminderNative: "Disponible sur l'app installée" },
+    en: { bedtimeSection: 'Bedtime', bedtimeLabel: 'Bedtime', reminderLabel: 'Remind me 15 min before', reminderAt: 'Notification at {time}', reminderNative: 'Available in the installed app' },
+    zh: { bedtimeSection: '就寝', bedtimeLabel: '就寝时间', reminderLabel: '提前 15 分钟提醒我', reminderAt: '将在 {time} 通知', reminderNative: '需在已安装的应用中使用' },
+    hi: { bedtimeSection: 'सोने का समय', bedtimeLabel: 'सोने का समय', reminderLabel: '15 मिनट पहले याद दिलाएँ', reminderAt: '{time} पर सूचना', reminderNative: 'इंस्टॉल किए गए ऐप में उपलब्ध' },
+    es: { bedtimeSection: 'Hora de dormir', bedtimeLabel: 'Hora de acostarse', reminderLabel: 'Avisarme 15 min antes', reminderAt: 'Notificación a las {time}', reminderNative: 'Disponible en la app instalada' },
+    ar: { bedtimeSection: 'وقت النوم', bedtimeLabel: 'وقت النوم', reminderLabel: 'ذكّرني قبل 15 دقيقة', reminderAt: 'إشعار في {time}', reminderNative: 'متاح في التطبيق المثبَّت' },
+    bn: { bedtimeSection: 'ঘুমের সময়', bedtimeLabel: 'ঘুমের সময়', reminderLabel: '১৫ মিনিট আগে মনে করিয়ে দাও', reminderAt: '{time}-এ বিজ্ঞপ্তি', reminderNative: 'ইনস্টল করা অ্যাপে উপলব্ধ' },
+    pt: { bedtimeSection: 'Hora de dormir', bedtimeLabel: 'Hora de dormir', reminderLabel: 'Avisar 15 min antes', reminderAt: 'Notificação às {time}', reminderNative: 'Disponível no app instalado' },
+    ru: { bedtimeSection: 'Отход ко сну', bedtimeLabel: 'Время сна', reminderLabel: 'Напомнить за 15 мин', reminderAt: 'Уведомление в {time}', reminderNative: 'Доступно в установленном приложении' },
+    ur: { bedtimeSection: 'سونے کا وقت', bedtimeLabel: 'سونے کا وقت', reminderLabel: '15 منٹ پہلے یاد دلائیں', reminderAt: '{time} پر اطلاع', reminderNative: 'انسٹال شدہ ایپ میں دستیاب' },
+    id: { bedtimeSection: 'Waktu tidur', bedtimeLabel: 'Waktu tidur', reminderLabel: 'Ingatkan 15 mnt sebelumnya', reminderAt: 'Notifikasi pukul {time}', reminderNative: 'Tersedia di aplikasi terpasang' },
+    de: { bedtimeSection: 'Schlafenszeit', bedtimeLabel: 'Schlafenszeit', reminderLabel: '15 Min vorher erinnern', reminderAt: 'Benachrichtigung um {time}', reminderNative: 'In der installierten App verfügbar' },
+    ja: { bedtimeSection: '就寝', bedtimeLabel: '就寝時刻', reminderLabel: '15分前に知らせる', reminderAt: '{time} に通知', reminderNative: 'インストール済みアプリで利用可能' },
+    sw: { bedtimeSection: 'Wakati wa kulala', bedtimeLabel: 'Saa ya kulala', reminderLabel: 'Nikumbushe dakika 15 kabla', reminderAt: 'Arifa saa {time}', reminderNative: 'Inapatikana kwenye programu iliyosakinishwa' },
+    mr: { bedtimeSection: 'झोपण्याची वेळ', bedtimeLabel: 'झोपण्याची वेळ', reminderLabel: '15 मिनिटे आधी आठवण करा', reminderAt: '{time} वाजता सूचना', reminderNative: 'इंस्टॉल केलेल्या अ‍ॅपमध्ये उपलब्ध' },
+    te: { bedtimeSection: 'నిద్రవేళ', bedtimeLabel: 'నిద్రవేళ', reminderLabel: '15 నిమిషాల ముందు గుర్తు చేయి', reminderAt: '{time}కి నోటిఫికేషన్', reminderNative: 'ఇన్‌స్టాల్ చేసిన యాప్‌లో అందుబాటులో ఉంది' },
+    tr: { bedtimeSection: 'Uyku vakti', bedtimeLabel: 'Yatma saati', reminderLabel: '15 dk önce hatırlat', reminderAt: 'Bildirim: {time}', reminderNative: 'Yüklü uygulamada kullanılabilir' },
+    ta: { bedtimeSection: 'தூங்கும் நேரம்', bedtimeLabel: 'தூங்கும் நேரம்', reminderLabel: '15 நிமிடம் முன் நினைவூட்டு', reminderAt: '{time} மணிக்கு அறிவிப்பு', reminderNative: 'நிறுவிய ஆப்பில் கிடைக்கும்' },
+    vi: { bedtimeSection: 'Giờ đi ngủ', bedtimeLabel: 'Giờ đi ngủ', reminderLabel: 'Nhắc trước 15 phút', reminderAt: 'Thông báo lúc {time}', reminderNative: 'Có trong ứng dụng đã cài đặt' },
+    ko: { bedtimeSection: '취침', bedtimeLabel: '취침 시간', reminderLabel: '15분 전에 알림', reminderAt: '{time}에 알림', reminderNative: '설치된 앱에서 사용 가능' },
+    tl: { bedtimeSection: 'Oras ng tulog', bedtimeLabel: 'Oras ng tulog', reminderLabel: 'Ipaalala 15 min bago', reminderAt: 'Abiso sa {time}', reminderNative: 'Magagamit sa naka-install na app' },
+    fa: { bedtimeSection: 'زمان خواب', bedtimeLabel: 'زمان خواب', reminderLabel: '۱۵ دقیقه قبل یادآوری کن', reminderAt: 'اعلان در {time}', reminderNative: 'در برنامهٔ نصب‌شده در دسترس است' },
+    it: { bedtimeSection: 'Nanna', bedtimeLabel: 'Ora della nanna', reminderLabel: 'Avvisami 15 min prima', reminderAt: 'Notifica alle {time}', reminderNative: "Disponibile nell'app installata" },
+    th: { bedtimeSection: 'เวลานอน', bedtimeLabel: 'เวลาเข้านอน', reminderLabel: 'เตือนล่วงหน้า 15 นาที', reminderAt: 'แจ้งเตือนเวลา {time}', reminderNative: 'ใช้ได้ในแอปที่ติดตั้งแล้ว' },
+    pa: { bedtimeSection: 'ਸੌਣ ਦਾ ਸਮਾਂ', bedtimeLabel: 'ਸੌਣ ਦਾ ਸਮਾਂ', reminderLabel: '15 ਮਿੰਟ ਪਹਿਲਾਂ ਯਾਦ ਕਰਾਓ', reminderAt: '{time} ਵਜੇ ਸੂਚਨਾ', reminderNative: 'ਇੰਸਟਾਲ ਕੀਤੀ ਐਪ ਵਿੱਚ ਉਪਲਬਧ' },
+    pl: { bedtimeSection: 'Pora snu', bedtimeLabel: 'Pora snu', reminderLabel: 'Przypomnij 15 min wcześniej', reminderAt: 'Powiadomienie o {time}', reminderNative: 'Dostępne w zainstalowanej aplikacji' },
+    uk: { bedtimeSection: 'Час сну', bedtimeLabel: 'Час сну', reminderLabel: 'Нагадати за 15 хв', reminderAt: 'Сповіщення о {time}', reminderNative: 'Доступно у встановленому застосунку' },
+  };
+  Object.keys(I18N_BEDTIME).forEach((code) => {
+    if (I18N[code]) Object.assign(I18N[code].s, I18N_BEDTIME[code]);
+  });
+
   // ---------- Configuration externe ----------
   // À renseigner pour activer le don et la mesure d'audience :
   const KOFI_URL = 'https://ko-fi.com/bedtimeroutine';  // vide = boutons masqués
@@ -646,10 +680,44 @@
     return run ? run.soundOn !== false : settings.soundOn !== false;
   }
 
+  // Heure stockée en 24 h "HH:MM" ; affichée selon l'horloge de l'appareil (24 h / AM-PM auto)
+  function fmtTime(hhmm) {
+    const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '');
+    if (!m) return hhmm || '';
+    const d = new Date();
+    d.setHours(+m[1], +m[2], 0, 0);
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', numberingSystem: 'latn' }).format(d);
+    } catch {
+      return hhmm;
+    }
+  }
+
+  // Heure du rappel = coucher − 15 min (renvoie "HH:MM" en 24 h)
+  function reminderTime(hhmm) {
+    const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '');
+    if (!m) return '';
+    let total = ((+m[1] * 60 + +m[2] - 15) % 1440 + 1440) % 1440;
+    return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+  }
+
+  // Vrai uniquement dans la build native (Capacitor) — la notif planifiée n'y est fiable que là
+  function isNativeApp() {
+    try {
+      return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+    } catch {
+      return false;
+    }
+  }
+
   // ---------- Stockage ----------
 
   function clampMin(m) {
     return Math.min(60, Math.max(1, Math.round(Number(m) || 1)));
+  }
+
+  function validBedtime(v) {
+    return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
   }
 
   // Langue de l'appareil si on l'a, sinon anglais
@@ -680,9 +748,11 @@
         soundOn: raw.soundOn !== false,
         introOn: raw.introOn !== false,
         lang: I18N[raw.lang] ? raw.lang : detectLang(),
+        bedtime: validBedtime(raw.bedtime) ? raw.bedtime : '20:00',
+        reminderOn: raw.reminderOn === true,
       };
     } catch {
-      return { phases: DEFAULT_PHASES.map((p) => ({ ...p })), soundOn: true, introOn: true, lang: detectLang() };
+      return { phases: DEFAULT_PHASES.map((p) => ({ ...p })), soundOn: true, introOn: true, lang: detectLang(), bedtime: '20:00', reminderOn: false };
     }
   }
 
@@ -1270,6 +1340,47 @@
     updateHomeFade();
   }
 
+  function renderBedtime() {
+    const input = $('bedtimeInput');
+    if (!input) return;
+    input.value = settings.bedtime;
+    $('reminderToggle').checked = settings.reminderOn;
+    const sub = $('reminderSub');
+    sub.textContent = settings.reminderOn ? t('reminderAt').replace('{time}', fmtTime(reminderTime(settings.bedtime))) : '';
+    const hint = $('reminderHint');
+    // Sur le web, la notif planifiée n'est pas fiable : on l'indique quand le rappel est activé
+    const showHint = settings.reminderOn && !isNativeApp();
+    hint.textContent = showHint ? t('reminderNative') : '';
+    hint.hidden = !showHint;
+  }
+
+  // Planifie / annule le rappel quotidien (coucher − 15 min). Effectif uniquement dans la build
+  // native (Capacitor expose le plugin sur window.Capacitor.Plugins) ; no-op sur le web.
+  // canRequest : demander la permission si besoin (true au clic utilisateur, false au démarrage).
+  const REMINDER_ID = 1;
+  async function syncReminder(canRequest) {
+    const LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
+    if (!isNativeApp() || !LN) return;
+    try {
+      // Toujours repartir d'un rappel propre
+      try { await LN.cancel({ notifications: [{ id: REMINDER_ID }] }); } catch {}
+      if (!settings.reminderOn || !validBedtime(settings.bedtime)) return;
+      let perm = await LN.checkPermissions();
+      if (perm.display !== 'granted') {
+        if (!canRequest) return;
+        perm = await LN.requestPermissions();
+        if (perm.display !== 'granted') return;
+      }
+      const [h, m] = reminderTime(settings.bedtime).split(':').map(Number);
+      await LN.schedule({ notifications: [{
+        id: REMINDER_ID,
+        title: t('appTitle'),
+        body: t('start'),
+        schedule: { on: { hour: h, minute: m }, allowWhileIdle: true },
+      }] });
+    } catch {}
+  }
+
   function applyLang() {
     const pack = I18N[settings.lang] || I18N.fr;
     document.documentElement.lang = settings.lang;
@@ -1284,6 +1395,9 @@
     $('lblSounds').textContent = t('sounds');
     $('lblIntro').textContent = t('introAnim');
     $('lblLang').textContent = t('language');
+    $('secBedtime').textContent = t('bedtimeSection');
+    $('lblBedtime').textContent = t('bedtimeLabel');
+    $('lblReminder').textContent = t('reminderLabel');
     $('btnDefaults').textContent = t('defaults');
     $('tabSteps').textContent = t('tabSteps');
     $('tabApp').textContent = t('tabApp');
@@ -1299,6 +1413,7 @@
     $('langSelect').value = settings.lang;
     renderHome();
     renderSettings();
+    renderBedtime();
   }
 
   // ---------- Réglages ----------
@@ -1505,6 +1620,20 @@
       settings.introOn = e.target.checked;
       saveSettings();
     });
+    $('bedtimeInput').addEventListener('change', (e) => {
+      if (!validBedtime(e.target.value)) { e.target.value = settings.bedtime; return; }
+      settings.bedtime = e.target.value;
+      saveSettings();
+      renderBedtime();
+      syncReminder(true);
+    });
+    $('reminderToggle').addEventListener('change', (e) => {
+      settings.reminderOn = e.target.checked;
+      saveSettings();
+      renderBedtime();
+      syncReminder(true);
+      track('rappel_coucher', { actif: settings.reminderOn });
+    });
     const sel = $('langSelect');
     Object.keys(I18N).forEach((code) => {
       const opt = document.createElement('option');
@@ -1516,6 +1645,7 @@
       settings.lang = I18N[sel.value] ? sel.value : 'fr';
       saveSettings();
       applyLang();
+      syncReminder(false);
       track('langue_changee', { langue: settings.lang });
     });
     $('intro').addEventListener('click', () => closeIntro(true));
@@ -1535,6 +1665,7 @@
     if (urlLang && I18N[urlLang]) settings.lang = urlLang;
 
     applyLang();
+    syncReminder(false);
 
     if (!resumeFromStorage()) showScreen('home');
 
