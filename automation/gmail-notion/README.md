@@ -12,7 +12,7 @@ Cron horaire (minute 23)
 vrac_sync.py
    ↓  API Gmail : objet commençant par « Vrac - », sans le label « importé »
    ↓  API Notion : envoi des images, puis création de la page
-   ↓  API Gmail : pose du label « Notion/Vrac importe » + archivage
+   ↓  API Gmail : pose des libellés + archivage, en un seul appel
 ```
 
 **L'anti-doublon, c'est le label Gmail.** Un mail déjà étiqueté est ignoré au
@@ -51,6 +51,23 @@ Le bloc de signature est retiré. Trois marqueurs, du plus sûr au moins sûr :
 
 Un mail réduit à sa signature donne donc une entrée sans corps, avec son titre
 et ses images : c'est le comportement voulu.
+
+### Libellés
+
+Deux libellés sont posés, avec des rôles distincts :
+
+- **`Notion/Vrac importe`** — marqueur technique. C'est lui, et lui seul, qui
+  empêche un second import. Ne pas le retirer à la main.
+- **`Vrac 2nd cerveau`** — libellé de classement, pour retrouver ces mails dans
+  Gmail. Purement cosmétique côté script ; plusieurs sont possibles, séparés par
+  des virgules dans `GMAIL_EXTRA_LABELS`.
+
+Si un seul libellé suffit, vider `GMAIL_EXTRA_LABELS` et mettre le nom voulu
+dans `GMAIL_PROCESSED_LABEL` : le marqueur technique devient alors le libellé
+visible.
+
+Les libellés sont posés **dans le même appel** que l'archivage, donc un mail ne
+peut pas quitter la boîte de réception sans avoir été libellé.
 
 ### Archivage
 
@@ -144,6 +161,7 @@ tail -f vrac-sync.log
 | `NOTION_DATABASE_ID` | `c3e6ee5f…` | Base « Vrac à classer » |
 | `GMAIL_SUBJECT_PREFIX` | `Vrac -` | Préfixe déclencheur, insensible à la casse |
 | `GMAIL_PROCESSED_LABEL` | `Notion/Vrac importe` | Label anti-doublon, créé au 1er passage |
+| `GMAIL_EXTRA_LABELS` | `Vrac 2nd cerveau` | Libellés de classement, séparés par des virgules |
 | `GMAIL_SEARCH_WINDOW_DAYS` | `30` | Fenêtre de recherche |
 | `GMAIL_ARCHIVE_AFTER_IMPORT` | `true` | Sort le mail de la boîte de réception |
 | `STRIP_SIGNATURE` | `true` | Retire le bloc de signature du corps |

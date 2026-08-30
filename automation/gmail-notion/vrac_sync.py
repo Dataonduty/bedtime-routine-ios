@@ -134,29 +134,46 @@ def gmail_service(token_path: Path, credentials_path: Path):
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
-def ensure_label(service, name: str) -> str:
-    """Renvoie l'ID du label, en le creant (avec ses parents) si besoin."""
+def ensure_labels(service, names: list[str]) -> list[str]:
+    """Renvoie les IDs des labels, en creant ceux qui manquent.
+
+    La liste des labels n'est demandee qu'une fois, quel que soit leur nombre.
+    """
     existing = {
         label["name"]: label["id"]
         for label in service.users().labels().list(userId="me").execute().get("labels", [])
     }
-    if name in existing:
-        return existing[name]
-    label = (
-        service.users()
-        .labels()
-        .create(
-            userId="me",
-            body={
-                "name": name,
-                "labelListVisibility": "labelShow",
-                "messageListVisibility": "show",
-            },
+    ids: list[str] = []
+    for name in names:
+        if name in existing:
+            ids.append(existing[name])
+            continue
+        label = (
+            service.users()
+            .labels()
+            .create(
+                userId="me",
+                body={
+                    "name": name,
+                    "labelListVisibility": "labelShow",
+                    "messageListVisibility": "show",
+                },
+            )
+            .execute()
         )
-        .execute()
-    )
-    log(f"Label Gmail cree : {name}")
-    return label["id"]
+        log(f"Label Gmail cree : {name}")
+        ids.append(label["id"])
+    return ids
+
+
+def parse_label_names(raw: str, exclude: str = "") -> list[str]:
+    """Decoupe une liste de labels separes par des virgules, sans doublon."""
+    names: list[str] = []
+    for name in raw.split(","):
+        name = name.strip()
+        if name and name != exclude and name not in names:
+            names.append(name)
+    return names
 
 
 def header(payload: dict, name: str) -> str:
@@ -571,6 +588,9 @@ def run(args: argparse.Namespace) -> int:
 
     prefix = env_str("GMAIL_SUBJECT_PREFIX", "Vrac -")
     label_name = env_str("GMAIL_PROCESSED_LABEL", "Notion/Vrac importe")
+    extra_label_names = parse_label_names(
+        env_str("GMAIL_EXTRA_LABELS", "Vrac 2nd cerveau"), exclude=label_name
+    )
     window_days = env_int("GMAIL_SEARCH_WINDOW_DAYS", 30)
     max_per_run = env_int("GMAIL_MAX_PER_RUN", 25)
     max_body = env_int("MAX_BODY_CHARS", 12000)
@@ -593,7 +613,9 @@ def run(args: argparse.Namespace) -> int:
     log(f"Base Notion cible : {notion.check_access()}")
 
     service = gmail_service(BASE_DIR / "token.json", BASE_DIR / "credentials.json")
-    label_id = ensure_label(service, label_name)
+    label_id, *extra_label_ids = ensure_labels(service, [label_name] + extra_label_names)
+    if extra_label_names:
+        log(f"Libelle(s) supplementaire(s) : {', '.join(extra_label_names)}")
 
     query = f'subject:"{prefix}" newer_than:{window_days}d -in:chats'
     listing = (
@@ -702,7 +724,9 @@ def run(args: argparse.Namespace) -> int:
                 joined = f", {len(entry['images'])} fichier(s)" if entry["images"] else ""
                 log(f"Cree : « {title} »{joined} -> {url}")
 
-            body_changes: dict = {"addLabelIds": [label_id]}
+            # Un seul appel : le mail ne peut pas sortir de la boite de reception
+            # sans avoir recu ses libelles.
+            body_changes: dict = {"addLabelIds": [label_id] + extra_label_ids}
             if archive_after:
                 body_changes["removeLabelIds"] = ["INBOX"]
             service.users().messages().modify(

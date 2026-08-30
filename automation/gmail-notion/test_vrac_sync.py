@@ -221,6 +221,24 @@ def test_strip_signature() -> None:
     )
 
 
+def test_parse_label_names() -> None:
+    check("libelle unique", v.parse_label_names("Vrac 2nd cerveau"), ["Vrac 2nd cerveau"])
+    check(
+        "plusieurs libelles",
+        v.parse_label_names("Vrac 2nd cerveau, À trier"),
+        ["Vrac 2nd cerveau", "À trier"],
+    )
+    check("liste vide", v.parse_label_names(""), [])
+    check("virgules superflues", v.parse_label_names(" , Vrac 2nd cerveau ,, "), ["Vrac 2nd cerveau"])
+    check("doublon retire", v.parse_label_names("A, A"), ["A"])
+    # Le libelle technique ne doit pas etre pose deux fois.
+    check(
+        "collision avec le libelle anti-doublon",
+        v.parse_label_names("Vrac 2nd cerveau, Notion/Vrac importe", exclude="Notion/Vrac importe"),
+        ["Vrac 2nd cerveau"],
+    )
+
+
 def test_received_at() -> None:
     dated = {"headers": [{"name": "Date", "value": "Sat, 29 Aug 2026 09:12:00 +0200"}]}
     check("received_at depuis l'en-tete", v.received_at(dated, None), "2026-08-29T09:12:00+02:00")
@@ -260,6 +278,7 @@ def main() -> int:
         test_match_prefix,
         test_extract_body,
         test_strip_signature,
+        test_parse_label_names,
         test_collect_attachments,
         test_worth_uploading,
         test_page_children,
