@@ -53,6 +53,21 @@ NOTION_MAX_CHILDREN = 95
 # le fichier reste alors dans Gmail.
 NOTION_SINGLE_UPLOAD_LIMIT = 20 * 1024 * 1024
 
+# Separateur de signature normalise (RFC 3676) : une ligne « -- » et rien d'autre.
+SIGNATURE_SEPARATOR_RE = re.compile(r"^\s*--\s*$")
+
+# Ligne de tirets, underscores ou egales servant de separateur decoratif.
+RULE_LINE_RE = re.compile(r"^\s*(?:[-_=~*–—]\s*){4,}$")
+
+# Pieds de page ajoutes par les clients mobiles.
+MOBILE_FOOTER_RE = re.compile(
+    r"^\s*(?:envoy[ée]\s+(?:de|depuis)\s+mon\b"
+    r"|sent\s+from\s+my\b"
+    r"|(?:obtenez|t[ée]l[ée]charg(?:er|ez))\s+outlook\s+pour\b"
+    r"|get\s+outlook\s+for\b)",
+    re.I,
+)
+
 # Prefixes de reponse/transfert tolere devant le prefixe declencheur.
 REPLY_PREFIX_RE = re.compile(r"^\s*(?:re|ref|rep|rép|fw|fwd|tr)\s*(?:\[\d+\])?\s*:\s*", re.I)
 
@@ -262,6 +277,30 @@ def fetch_attachment(service, message_id: str, attachment: dict) -> bytes | None
     )
     data = payload.get("data")
     return base64.urlsafe_b64decode(data) if data else None
+
+
+def strip_signature(body: str, max_signature_chars: int = 400) -> str:
+    """Retire le bloc de signature en fin de mail.
+
+    Trois marqueurs, du plus sur au moins sur :
+      - la ligne « -- » normalisee, qui ne veut jamais dire autre chose ;
+      - un pied de page de client mobile (« Envoye de mon iPhone ») ;
+      - une ligne decorative de tirets, mais seulement si ce qui suit est court.
+        Sans cette condition, un simple trait de separation au milieu d'une note
+        emporterait tout le reste du texte.
+    """
+    if not body:
+        return body
+
+    lines = body.split("\n")
+    for index, line in enumerate(lines):
+        if SIGNATURE_SEPARATOR_RE.match(line) or MOBILE_FOOTER_RE.match(line):
+            return "\n".join(lines[:index]).strip()
+        if RULE_LINE_RE.match(line):
+            tail = "\n".join(lines[index + 1 :]).strip()
+            if len(tail) <= max_signature_chars:
+                return "\n".join(lines[:index]).strip()
+    return body.strip()
 
 
 def strip_reply_prefixes(subject: str) -> str:
@@ -535,7 +574,9 @@ def run(args: argparse.Namespace) -> int:
     window_days = env_int("GMAIL_SEARCH_WINDOW_DAYS", 30)
     max_per_run = env_int("GMAIL_MAX_PER_RUN", 25)
     max_body = env_int("MAX_BODY_CHARS", 12000)
-    archive_after = env_bool("GMAIL_ARCHIVE_AFTER_IMPORT", False)
+    archive_after = env_bool("GMAIL_ARCHIVE_AFTER_IMPORT", True)
+    strip_sig = env_bool("STRIP_SIGNATURE", True)
+    signature_max = env_int("SIGNATURE_MAX_CHARS", 400)
     upload_images = env_bool("UPLOAD_IMAGES", True)
     upload_other = env_bool("UPLOAD_OTHER_ATTACHMENTS", False)
     min_image_bytes = env_int("MIN_IMAGE_BYTES", 8000)
@@ -593,7 +634,10 @@ def run(args: argparse.Namespace) -> int:
         sender = header(payload, "From")
         name, address = parseaddr(sender)
         sender_label = f"{name} <{address}>" if name else (address or sender)
-        body = extract_body(payload)[:max_body]
+        body = extract_body(payload)
+        if strip_sig:
+            body = strip_signature(body, signature_max)
+        body = body[:max_body]
         attachments = collect_attachments(payload)
 
         to_upload = (

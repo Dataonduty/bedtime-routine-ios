@@ -11,8 +11,8 @@ Cron horaire (minute 23)
    ↓  net-run.sh + venv Python
 vrac_sync.py
    ↓  API Gmail : objet commençant par « Vrac - », sans le label « importé »
-   ↓  API Notion : création d'une page dans « Vrac à classer »
-   ↓  API Gmail : pose du label « Notion/Vrac importe » sur le mail
+   ↓  API Notion : envoi des images, puis création de la page
+   ↓  API Gmail : pose du label « Notion/Vrac importe » + archivage
 ```
 
 **L'anti-doublon, c'est le label Gmail.** Un mail déjà étiqueté est ignoré au
@@ -38,6 +38,26 @@ milieu, on risque un doublon (rattrapé par le filet) plutôt qu'un mail perdu.
 
 Le corps du mail est recopié dans le contenu de la page (texte brut de
 préférence, sinon HTML détagué), tronqué à `MAX_BODY_CHARS`.
+
+### Signature
+
+Le bloc de signature est retiré. Trois marqueurs, du plus sûr au moins sûr :
+
+1. la ligne `--` normalisée (RFC 3676), qui ne veut jamais dire autre chose ;
+2. un pied de page de client mobile (« Envoyé de mon iPhone », « Sent from my… ») ;
+3. une ligne décorative de tirets — **mais seulement si ce qui suit tient en
+   `SIGNATURE_MAX_CHARS`**. Sans cette garde, un simple trait de séparation au
+   milieu d'une note emporterait tout le texte qui suit.
+
+Un mail réduit à sa signature donne donc une entrée sans corps, avec son titre
+et ses images : c'est le comportement voulu.
+
+### Archivage
+
+Une fois importé, le mail **sort de la boîte de réception**
+(`GMAIL_ARCHIVE_AFTER_IMPORT`). Il n'est pas supprimé : il reste dans « Tous les
+messages », et le lien de la page Notion continue de l'ouvrir. La boîte de
+réception se vide donc d'elle-même au fil des imports.
 
 ### Images
 
@@ -125,7 +145,9 @@ tail -f vrac-sync.log
 | `GMAIL_SUBJECT_PREFIX` | `Vrac -` | Préfixe déclencheur, insensible à la casse |
 | `GMAIL_PROCESSED_LABEL` | `Notion/Vrac importe` | Label anti-doublon, créé au 1er passage |
 | `GMAIL_SEARCH_WINDOW_DAYS` | `30` | Fenêtre de recherche |
-| `GMAIL_ARCHIVE_AFTER_IMPORT` | `false` | Sort le mail de la boîte de réception |
+| `GMAIL_ARCHIVE_AFTER_IMPORT` | `true` | Sort le mail de la boîte de réception |
+| `STRIP_SIGNATURE` | `true` | Retire le bloc de signature du corps |
+| `SIGNATURE_MAX_CHARS` | `400` | Au-delà, un trait de séparation n'est plus vu comme une signature |
 | `GMAIL_MAX_PER_RUN` | `25` | Garde-fou par passage |
 | `MAX_BODY_CHARS` | `12000` | Longueur max du corps recopié |
 | `UPLOAD_IMAGES` | `true` | Téléverse les images dans Notion |

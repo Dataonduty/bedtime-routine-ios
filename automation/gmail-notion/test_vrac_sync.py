@@ -175,6 +175,52 @@ def test_page_children() -> None:
         failures.append(f"page_children renvoie {len(huge)} blocs, Notion en refuse plus de 100")
 
 
+# Signature reelle du mail « Vrac - test ».
+REAL_SIGNATURE = (
+    "-----------------------------\n\n*Geoffrey Sanchez*\n\n"
+    "06 29 61 59 22\n-----------------------------"
+)
+
+
+def test_strip_signature() -> None:
+    check("signature seule -> corps vide", v.strip_signature(REAL_SIGNATURE), "")
+    check(
+        "texte puis signature",
+        v.strip_signature("Acheter du ciment.\n\n" + REAL_SIGNATURE),
+        "Acheter du ciment.",
+    )
+    check(
+        "separateur normalise RFC 3676",
+        v.strip_signature("Le texte utile.\n\n-- \nGeoffrey\n06 29 61 59 22"),
+        "Le texte utile.",
+    )
+    check(
+        "pied de page mobile",
+        v.strip_signature("Penser au devis.\n\nEnvoyé de mon iPhone"),
+        "Penser au devis.",
+    )
+    check(
+        "pied de page anglais",
+        v.strip_signature("Check this.\n\nSent from my Samsung Galaxy smartphone"),
+        "Check this.",
+    )
+
+    # Un trait de separation suivi de beaucoup de texte n'est pas une signature :
+    # sans cette garde, une note structuree perdrait tout ce qui suit son trait.
+    long_note = "Titre\n\n-----\n\n" + "Du contenu qui compte. " * 40
+    check("trait suivi d'un long texte conserve", v.strip_signature(long_note), long_note.strip())
+
+    check("corps vide", v.strip_signature(""), "")
+    check("aucune signature", v.strip_signature("Juste une note."), "Juste une note.")
+
+    # Le seuil est reglable : trop bas, la signature repasse.
+    check(
+        "seuil trop bas",
+        v.strip_signature("Note.\n\n-----\n\nGeoffrey Sanchez", max_signature_chars=5),
+        "Note.\n\n-----\n\nGeoffrey Sanchez",
+    )
+
+
 def test_received_at() -> None:
     dated = {"headers": [{"name": "Date", "value": "Sat, 29 Aug 2026 09:12:00 +0200"}]}
     check("received_at depuis l'en-tete", v.received_at(dated, None), "2026-08-29T09:12:00+02:00")
@@ -213,6 +259,7 @@ def main() -> int:
     for test in (
         test_match_prefix,
         test_extract_body,
+        test_strip_signature,
         test_collect_attachments,
         test_worth_uploading,
         test_page_children,
