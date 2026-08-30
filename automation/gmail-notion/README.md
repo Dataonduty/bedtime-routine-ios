@@ -39,16 +39,30 @@ milieu, on risque un doublon (rattrapé par le filet) plutôt qu'un mail perdu.
 Le corps du mail est recopié dans le contenu de la page (texte brut de
 préférence, sinon HTML détagué), tronqué à `MAX_BODY_CHARS`.
 
-### Pièces jointes
+### Images
 
-Les **noms** des pièces jointes sont listés en bas de la page ; les fichiers
-eux-mêmes restent dans Gmail, accessibles via le lien de la page. Un mail sans
-texte mais avec une photo — le cas du « je me photographie un truc et je me
-l'envoie » — donne donc une entrée explicite plutôt qu'une page vide.
+**Les images sont téléversées dans Notion** et affichées dans la page, légendées
+par leur nom de fichier. Peu importe qu'elles soient en pièce jointe ou collées
+dans le corps du mail : une image insérée dans un mail est une partie MIME comme
+une autre, avec un `Content-ID` et un `Content-Disposition: inline`. Le script
+les traite pareil.
 
-Téléverser réellement les fichiers dans Notion est possible (API *file upload*,
-en trois appels par fichier) mais n'est pas fait : ça alourdirait la base et
-dupliquerait un stockage que Gmail assure déjà.
+Chaque image passe par le flux d'upload de Notion : déclaration du fichier
+(`POST /file_uploads`), envoi du binaire à l'URL renvoyée, puis référencement
+dans un bloc `image` via son `file_upload.id`.
+
+Deux garde-fous :
+
+- **Seuil de taille** (`MIN_IMAGE_BYTES`, 8 ko par défaut). Les mails HTML
+  trimballent des pixels de suivi de 1×1 et des logos de signature. Sous le
+  seuil, une image n'a jamais rien à dire. Le seuil ne s'applique qu'aux images.
+- **Limite de 20 Mo** par fichier, celle de l'envoi Notion en un seul morceau.
+  Au-delà, le fichier est signalé par son nom et reste dans Gmail.
+
+Les fichiers non-images (PDF…) sont seulement listés par leur nom, sauf si
+`UPLOAD_OTHER_ATTACHMENTS=true`. Tout fichier non téléversé — trop gros, trop
+petit, ou filtré — apparaît sous « Autres pièces jointes », donc rien ne
+disparaît silencieusement.
 
 ## Installation sur le Pi
 
@@ -114,6 +128,10 @@ tail -f vrac-sync.log
 | `GMAIL_ARCHIVE_AFTER_IMPORT` | `false` | Sort le mail de la boîte de réception |
 | `GMAIL_MAX_PER_RUN` | `25` | Garde-fou par passage |
 | `MAX_BODY_CHARS` | `12000` | Longueur max du corps recopié |
+| `UPLOAD_IMAGES` | `true` | Téléverse les images dans Notion |
+| `MIN_IMAGE_BYTES` | `8000` | Sous ce seuil, une image est ignorée (pixels de suivi, logos) |
+| `UPLOAD_OTHER_ATTACHMENTS` | `false` | Téléverse aussi les PDF et autres fichiers |
+| `MAX_FILES_PER_MAIL` | `10` | Garde-fou par mail |
 
 `.env`, `token.json` et `credentials.json` sont dans le `.gitignore` : **aucun
 secret ne part dans le dépôt.**
@@ -137,6 +155,8 @@ partagée, déclenche les protections anti-abus de Google sur le compte.
 | Un mail correspondant est ignoré | Il porte déjà le label ; ou il est plus vieux que la fenêtre ; ou l'objet ne **commence** pas par le préfixe |
 | Doublons dans Notion | Label retiré manuellement ET `ID message` modifié |
 | Page Notion sans contenu | Mail sans corps ni pièce jointe |
+| Une image manque dans la page | Sous `MIN_IMAGE_BYTES`, au-delà de 20 Mo, ou au-delà de `MAX_FILES_PER_MAIL` — son nom est alors sous « Autres pièces jointes » |
+| Logo de signature importé | Remonter `MIN_IMAGE_BYTES` |
 
 Les mails que l'on s'envoie à soi-même portent le label `SENT` : ils sont bien
 pris en compte, la recherche ne se limite pas à la boîte de réception.

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import base64
 import html
+import mimetypes
 import os
 import re
 import sys
@@ -32,11 +33,25 @@ from googleapiclient.errors import HttpError
 BASE_DIR = Path(__file__).resolve().parent
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 NOTION_API = "https://api.notion.com/v1"
-NOTION_VERSION = "2022-06-28"
 
-# Notion refuse un bloc texte au-dela de 2000 caracteres.
+# Deux versions d'API, volontairement.
+# - Les pages et la base restent en 2022-06-28 : depuis 2025-09-03 une base
+#   contient des « data sources » et le parent d'une page se designe autrement.
+# - L'API d'envoi de fichiers, elle, exige une version recente.
+# Notion-Version se pose par requete, ce cloisonnement est donc sans risque.
+# Les deux se surchargent dans .env si Notion fait encore evoluer tout ca.
+NOTION_VERSION = "2022-06-28"
+NOTION_UPLOAD_VERSION = "2026-03-11"
+
+# Notion refuse un bloc texte au-dela de 2000 caracteres, et une page ne peut
+# pas naitre avec plus de 100 blocs enfants. On garde de la marge pour les images.
 NOTION_TEXT_CHUNK = 1900
-NOTION_MAX_BLOCKS = 90
+NOTION_MAX_BLOCKS = 60
+NOTION_MAX_CHILDREN = 95
+
+# Au-dela, l'envoi doit etre decoupe en plusieurs morceaux : on ne le fait pas,
+# le fichier reste alors dans Gmail.
+NOTION_SINGLE_UPLOAD_LIMIT = 20 * 1024 * 1024
 
 # Prefixes de reponse/transfert tolere devant le prefixe declencheur.
 REPLY_PREFIX_RE = re.compile(r"^\s*(?:re|ref|rep|rép|fw|fwd|tr)\s*(?:\[\d+\])?\s*:\s*", re.I)
@@ -172,19 +187,81 @@ def extract_body(payload: dict) -> str:
     return text.strip()
 
 
-def extract_attachments(payload: dict) -> list[str]:
-    """Noms des pieces jointes. Un mail « vrac » est souvent une photo sans texte."""
-    names: list[str] = []
+def collect_attachments(payload: dict) -> list[dict]:
+    """Toutes les pieces jointes, y compris les images inserees dans le corps.
+
+    Une image collee dans un mail est une partie MIME comme une autre : elle
+    porte juste un Content-ID et un Content-Disposition « inline ». On la traite
+    donc exactement comme une piece jointe classique.
+    """
+    found: list[dict] = []
 
     def walk(part: dict) -> None:
+        body = part.get("body", {}) or {}
+        mime = part.get("mimeType", "") or ""
         filename = (part.get("filename") or "").strip()
-        if filename and part.get("body", {}).get("attachmentId"):
-            names.append(filename)
+        attachment_id = body.get("attachmentId")
+        inline_data = body.get("data")
+
+        is_attachment = bool(attachment_id) or bool(filename)
+        if is_attachment and not mime.startswith("multipart/"):
+            disposition = header(part, "Content-Disposition").lower()
+            found.append(
+                {
+                    "filename": filename or default_filename(mime, len(found) + 1),
+                    "mime_type": mime or "application/octet-stream",
+                    "attachment_id": attachment_id,
+                    "inline_data": inline_data,
+                    "size": int(body.get("size") or 0),
+                    "inline": "inline" in disposition or bool(header(part, "Content-ID")),
+                }
+            )
         for child in part.get("parts", []) or []:
             walk(child)
 
     walk(payload)
-    return names
+    return found
+
+
+def default_filename(mime_type: str, index: int) -> str:
+    """Les images collees dans le corps arrivent souvent sans nom de fichier."""
+    extension = mimetypes.guess_extension(mime_type.split(";")[0].strip()) or ".bin"
+    if extension == ".jpe":
+        extension = ".jpg"
+    return f"image-{index}{extension}"
+
+
+def is_image(attachment: dict) -> bool:
+    return attachment["mime_type"].lower().startswith("image/")
+
+
+def worth_uploading(attachment: dict, upload_other: bool, min_image_bytes: int) -> bool:
+    """Decide si une piece jointe merite d'etre televersee dans Notion.
+
+    Les mails HTML trainent des pixels de suivi et des logos de signature : sous
+    le seuil, une image n'a jamais rien a dire. Le seuil ne s'applique qu'aux
+    images — un petit fichier joint volontairement, lui, compte.
+    """
+    if is_image(attachment):
+        return attachment["size"] >= min_image_bytes
+    return upload_other
+
+
+def fetch_attachment(service, message_id: str, attachment: dict) -> bytes | None:
+    """Telecharge le contenu binaire d'une piece jointe."""
+    if attachment.get("inline_data"):
+        return base64.urlsafe_b64decode(attachment["inline_data"])
+    if not attachment.get("attachment_id"):
+        return None
+    payload = (
+        service.users()
+        .messages()
+        .attachments()
+        .get(userId="me", messageId=message_id, id=attachment["attachment_id"])
+        .execute()
+    )
+    data = payload.get("data")
+    return base64.urlsafe_b64decode(data) if data else None
 
 
 def strip_reply_prefixes(subject: str) -> str:
@@ -210,8 +287,10 @@ def match_prefix(subject: str, prefix: str) -> str | None:
 # --------------------------------------------------------------------------
 
 class Notion:
-    def __init__(self, token: str, database_id: str) -> None:
+    def __init__(self, token: str, database_id: str, upload_version: str) -> None:
         self.database_id = database_id
+        self.token = token
+        self.upload_version = upload_version
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -221,13 +300,14 @@ class Notion:
             }
         )
 
-    def _request(self, method: str, path: str, **kwargs) -> dict:
+    def _request(self, method: str, path: str, version: str = "", **kwargs) -> dict:
         """Appel HTTP avec retentative sur 429 et erreurs serveur."""
         delay = 2
         last_error = ""
+        headers = {"Notion-Version": version} if version else None
         for attempt in range(4):
             response = self.session.request(
-                method, f"{NOTION_API}{path}", timeout=30, **kwargs
+                method, f"{NOTION_API}{path}", timeout=30, headers=headers, **kwargs
             )
             if response.status_code < 400:
                 return response.json()
@@ -245,6 +325,48 @@ class Notion:
         data = self._request("GET", f"/databases/{self.database_id}")
         title = "".join(part.get("plain_text", "") for part in data.get("title", []))
         return title or self.database_id
+
+    def upload_file(self, filename: str, mime_type: str, data: bytes) -> str | None:
+        """Televerse un fichier et renvoie son identifiant, utilisable dans un bloc.
+
+        Notion procede en deux temps : on declare le fichier, puis on l'envoie a
+        l'URL renvoyee. Au-dela de 20 Mo il faudrait decouper l'envoi ; on ne le
+        fait pas, le fichier reste alors dans Gmail.
+
+        L'identifiant renvoye expire au bout d'une heure s'il n'est rattache a
+        aucun bloc — d'ou l'envoi juste avant la creation de la page.
+        """
+        if len(data) > NOTION_SINGLE_UPLOAD_LIMIT:
+            log(f"  {filename} : {len(data) / 1e6:.1f} Mo, trop gros pour un envoi simple — ignore.")
+            return None
+
+        created = self._request(
+            "POST",
+            "/file_uploads",
+            version=self.upload_version,
+            json={"filename": filename[:900], "content_type": mime_type},
+        )
+        upload_url = created.get("upload_url")
+        upload_id = created.get("id")
+        if not upload_url or not upload_id:
+            log(f"  {filename} : reponse d'upload inattendue — ignore.")
+            return None
+
+        # L'envoi est en multipart : requests pose lui-meme le bon Content-Type,
+        # celui de la session (application/json) ferait echouer l'appel.
+        response = requests.post(
+            upload_url,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Notion-Version": self.upload_version,
+            },
+            files={"file": (filename, data, mime_type)},
+            timeout=120,
+        )
+        if response.status_code >= 400:
+            log(f"  {filename} : envoi refuse ({response.status_code}) — ignore.")
+            return None
+        return upload_id
 
     def already_imported(self, message_id: str) -> bool:
         """Garde-fou secondaire : le label Gmail reste la reference."""
@@ -274,7 +396,9 @@ class Notion:
                     "rich_text": [{"text": {"content": entry["message_id"]}}]
                 },
             },
-            "children": body_blocks(entry["body"], entry["attachments"]),
+            "children": page_children(
+                entry["body"], entry["images"], entry["other_files"]
+            ),
         }
         if entry["received_at"]:
             payload["properties"]["Date réception"] = {
@@ -291,17 +415,28 @@ def paragraph(text: str) -> dict:
     }
 
 
-def body_blocks(body: str, attachments: list[str] | None = None) -> list[dict]:
-    """Decoupe le corps du mail en blocs paragraphe acceptes par Notion."""
-    attachments = attachments or []
+def page_children(body: str, images: list[dict], other_files: list[str]) -> list[dict]:
+    """Assemble le contenu de la page : texte, puis images, puis fichiers restants.
 
+    Notion refuse une page creee avec plus de 100 blocs. Les images et la liste
+    des fichiers reservent leur place d'abord : c'est le texte qui est rogne, pas
+    une piece jointe qui disparait.
+    """
+    tail = image_blocks(images) + attachment_blocks(other_files)
+    budget = max(1, NOTION_MAX_CHILDREN - len(tail))
+    text = body_blocks(body, has_files=bool(images or other_files))
+    if len(text) > budget:
+        text = text[: budget - 1] + [paragraph("(…) Texte tronque — voir le mail d'origine.")]
+    return text + tail
+
+
+def body_blocks(body: str, has_files: bool = False) -> list[dict]:
+    """Decoupe le corps du mail en blocs paragraphe acceptes par Notion."""
     if not body:
-        if attachments:
+        if has_files:
             # Cas courant : une photo envoyee a soi-meme, sans un mot.
-            note = "(Aucun texte — le mail ne contient que sa ou ses pieces jointes.)"
-        else:
-            note = "(Mail sans corps texte.)"
-        return [paragraph(note)] + attachment_blocks(attachments)
+            return [paragraph("(Aucun texte — le mail ne contient que ses fichiers.)")]
+        return [paragraph("(Mail sans corps texte.)")]
 
     chunks: list[str] = []
     for block in body.split("\n\n"):
@@ -324,27 +459,49 @@ def body_blocks(body: str, attachments: list[str] | None = None) -> list[dict]:
     if truncated:
         chunks.append("(…) Corps du mail tronque — ouvrir le lien Gmail pour la suite.")
 
-    return [paragraph(chunk) for chunk in chunks] + attachment_blocks(attachments)
+    return [paragraph(chunk) for chunk in chunks]
 
 
-def attachment_blocks(attachments: list[str]) -> list[dict]:
-    """Liste les pieces jointes : le fichier reste dans Gmail, mais il est signale."""
-    if not attachments:
+def heading(text: str) -> dict:
+    return {
+        "object": "block",
+        "type": "heading_3",
+        "heading_3": {"rich_text": [{"text": {"content": text}}]},
+    }
+
+
+def image_blocks(images: list[dict]) -> list[dict]:
+    """Images reellement televersees dans Notion, affichees dans la page."""
+    if not images:
         return []
-    blocks = [
-        {
-            "object": "block",
-            "type": "heading_3",
-            "heading_3": {"rich_text": [{"text": {"content": "Pièces jointes"}}]},
-        }
-    ]
+    blocks = [heading("Images")]
+    for image in images:
+        blocks.append(
+            {
+                "object": "block",
+                "type": "image",
+                "image": {
+                    "type": "file_upload",
+                    "file_upload": {"id": image["upload_id"]},
+                    "caption": [{"text": {"content": image["filename"][:2000]}}],
+                },
+            }
+        )
+    return blocks
+
+
+def attachment_blocks(names: list[str]) -> list[dict]:
+    """Fichiers non televerses : ils restent dans Gmail, mais sont signales."""
+    if not names:
+        return []
+    blocks = [heading("Autres pièces jointes")]
     blocks += [
         {
             "object": "block",
             "type": "bulleted_list_item",
             "bulleted_list_item": {"rich_text": [{"text": {"content": name[:2000]}}]},
         }
-        for name in attachments[:20]
+        for name in names[:20]
     ]
     blocks.append(paragraph("Fichiers consultables via le lien Gmail de cette page."))
     return blocks
@@ -379,13 +536,19 @@ def run(args: argparse.Namespace) -> int:
     max_per_run = env_int("GMAIL_MAX_PER_RUN", 25)
     max_body = env_int("MAX_BODY_CHARS", 12000)
     archive_after = env_bool("GMAIL_ARCHIVE_AFTER_IMPORT", False)
+    upload_images = env_bool("UPLOAD_IMAGES", True)
+    upload_other = env_bool("UPLOAD_OTHER_ATTACHMENTS", False)
+    min_image_bytes = env_int("MIN_IMAGE_BYTES", 8000)
+    max_files = env_int("MAX_FILES_PER_MAIL", 10)
 
     token = env_str("NOTION_TOKEN")
     database_id = env_str("NOTION_DATABASE_ID")
     if not token or not database_id:
         raise SystemExit("NOTION_TOKEN et NOTION_DATABASE_ID sont obligatoires (voir .env).")
 
-    notion = Notion(token, database_id)
+    notion = Notion(
+        token, database_id, env_str("NOTION_UPLOAD_VERSION", NOTION_UPLOAD_VERSION)
+    )
     log(f"Base Notion cible : {notion.check_access()}")
 
     service = gmail_service(BASE_DIR / "token.json", BASE_DIR / "credentials.json")
@@ -431,7 +594,18 @@ def run(args: argparse.Namespace) -> int:
         name, address = parseaddr(sender)
         sender_label = f"{name} <{address}>" if name else (address or sender)
         body = extract_body(payload)[:max_body]
-        attachments = extract_attachments(payload)
+        attachments = collect_attachments(payload)
+
+        to_upload = (
+            [a for a in attachments if worth_uploading(a, upload_other, min_image_bytes)][
+                :max_files
+            ]
+            if upload_images
+            else []
+        )
+        retained = {id(a) for a in to_upload}
+        skipped_files = [a["filename"] for a in attachments if id(a) not in retained]
+
         entry = {
             "title": title,
             "sender": sender_label,
@@ -439,12 +613,20 @@ def run(args: argparse.Namespace) -> int:
             "link": f"https://mail.google.com/mail/u/0/#all/{message.get('threadId', stub['id'])}",
             "message_id": stub["id"],
             "body": body,
-            "attachments": attachments,
+            "images": [],
+            "other_files": skipped_files,
         }
 
         if args.dry_run:
-            joined = f" + {len(attachments)} piece(s) jointe(s)" if attachments else ""
-            log(f"[essai] « {title} » — de {sender_label}{joined} (aucune ecriture)")
+            detail = ""
+            if to_upload:
+                names = ", ".join(
+                    f"{a['filename']} ({a['size'] / 1000:.0f} ko)" for a in to_upload
+                )
+                detail += f" — a televerser : {names}"
+            if skipped_files:
+                detail += f" — ignores : {', '.join(skipped_files)}"
+            log(f"[essai] « {title} » — de {sender_label}{detail} (aucune ecriture)")
             imported += 1
             continue
 
@@ -452,8 +634,29 @@ def run(args: argparse.Namespace) -> int:
             if notion.already_imported(stub["id"]):
                 log(f"Deja present dans Notion, on pose juste le label : « {title} »")
             else:
+                for attachment in to_upload:
+                    # Un envoi qui echoue degrade le fichier en simple mention :
+                    # mieux vaut une page sans l'image qu'un mail jamais importe.
+                    upload_id = None
+                    try:
+                        data = fetch_attachment(service, stub["id"], attachment)
+                        if data:
+                            upload_id = notion.upload_file(
+                                attachment["filename"], attachment["mime_type"], data
+                            )
+                    except (RuntimeError, HttpError, requests.RequestException) as error:
+                        log(f"  {attachment['filename']} : envoi impossible ({error})")
+
+                    if upload_id:
+                        entry["images"].append(
+                            {"upload_id": upload_id, "filename": attachment["filename"]}
+                        )
+                    else:
+                        entry["other_files"].append(attachment["filename"])
+
                 url = notion.create_entry(entry)
-                log(f"Cree : « {title} » -> {url}")
+                joined = f", {len(entry['images'])} fichier(s)" if entry["images"] else ""
+                log(f"Cree : « {title} »{joined} -> {url}")
 
             body_changes: dict = {"addLabelIds": [label_id]}
             if archive_after:

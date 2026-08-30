@@ -83,36 +83,96 @@ def test_extract_body() -> None:
     check("extract_body sans corps", v.extract_body({"mimeType": "text/plain"}), "")
 
 
-def test_extract_attachments() -> None:
-    # Cas reel : mail « Vrac - finalisation vrac e-mail » — une photo, aucun texte.
-    photo_only = {
-        "mimeType": "multipart/mixed",
-        "parts": [
-            {"mimeType": "text/plain", "filename": "", "body": {"size": 0}},
-            {
-                "mimeType": "image/jpeg",
-                "filename": "88983.jpg",
-                "body": {"attachmentId": "ANGjdJ", "size": 1280000},
-            },
-        ],
-    }
-    check("extract_attachments photo seule", v.extract_attachments(photo_only), ["88983.jpg"])
-    check("extract_body photo seule", v.extract_body(photo_only), "")
+# Cas reel : mail « Vrac - finalisation vrac e-mail » — une photo, aucun texte.
+PHOTO_ONLY = {
+    "mimeType": "multipart/mixed",
+    "parts": [
+        {"mimeType": "text/plain", "filename": "", "body": {"size": 0}},
+        {
+            "mimeType": "image/jpeg",
+            "filename": "88983.jpg",
+            "body": {"attachmentId": "ANGjdJ", "size": 1280000},
+        },
+    ],
+}
 
-    blocks = v.body_blocks(v.extract_body(photo_only), v.extract_attachments(photo_only))
-    types = [b["type"] for b in blocks]
+# Mail HTML avec une image collee dans le corps (Content-ID, sans nom de fichier)
+# et un pixel de suivi : le premier doit passer, le second non.
+INLINE_IMAGE = {
+    "mimeType": "multipart/related",
+    "parts": [
+        {"mimeType": "text/plain", "filename": "", "body": {"data": "Vm9pY2kgbGEgcGhvdG8="}},
+        {
+            "mimeType": "image/png",
+            "filename": "",
+            "headers": [
+                {"name": "Content-ID", "value": "<ii_abc123>"},
+                {"name": "Content-Disposition", "value": "inline"},
+            ],
+            "body": {"attachmentId": "ANGjdK", "size": 240000},
+        },
+        {
+            "mimeType": "image/gif",
+            "filename": "pixel.gif",
+            "body": {"attachmentId": "ANGjdL", "size": 43},
+        },
+    ],
+}
+
+
+def test_collect_attachments() -> None:
+    found = v.collect_attachments(PHOTO_ONLY)
+    check("collect_attachments photo seule", [a["filename"] for a in found], ["88983.jpg"])
+    check("extract_body photo seule", v.extract_body(PHOTO_ONLY), "")
+
+    inline = v.collect_attachments(INLINE_IMAGE)
+    check("collect_attachments image collee", len(inline), 2)
+    # Une image collee dans le corps n'a pas de nom de fichier : on lui en donne un.
+    check("nom derive du type MIME", inline[0]["filename"], "image-1.png")
+    check("image collee reperee comme inline", inline[0]["inline"], True)
+
+
+def test_worth_uploading() -> None:
+    inline = v.collect_attachments(INLINE_IMAGE)
+    image, pixel = inline[0], inline[1]
+
+    check("image utile televersee", v.worth_uploading(image, False, 8000), True)
+    check("pixel de suivi ecarte", v.worth_uploading(pixel, False, 8000), False)
+
+    pdf = {"mime_type": "application/pdf", "filename": "devis.pdf", "size": 500}
+    check("PDF ecarte par defaut", v.worth_uploading(pdf, False, 8000), False)
+    # Le seuil de taille ne vaut que pour les images : un petit PDF reste utile.
+    check("PDF televerse si demande", v.worth_uploading(pdf, True, 8000), True)
+
+
+def test_page_children() -> None:
+    images = [{"upload_id": "u1", "filename": "88983.jpg"}]
+
     check(
-        "body_blocks signale la piece jointe",
-        types,
+        "page avec image, sans texte",
+        [b["type"] for b in v.page_children("", images, [])],
+        ["paragraph", "heading_3", "image"],
+    )
+    check(
+        "page avec texte et image",
+        [b["type"] for b in v.page_children("du texte", images, [])],
+        ["paragraph", "heading_3", "image"],
+    )
+    check(
+        "fichier non televerse signale",
+        [b["type"] for b in v.page_children("du texte", [], ["gros.zip"])],
         ["paragraph", "heading_3", "bulleted_list_item", "paragraph"],
     )
-
-    # Un corps de texte sans piece jointe ne doit pas gagner de section parasite.
+    # Un mail ordinaire ne doit gagner aucune section parasite.
     check(
-        "body_blocks sans piece jointe",
-        [b["type"] for b in v.body_blocks("du texte", [])],
+        "texte seul",
+        [b["type"] for b in v.page_children("du texte", [], [])],
         ["paragraph"],
     )
+    # Notion refuse une page creee avec plus de 100 blocs enfants.
+    huge = v.page_children("\n\n".join(f"para {i}" for i in range(500)), images, ["a.zip"])
+    if len(huge) > 100:
+        failures.append(f"page_children renvoie {len(huge)} blocs, Notion en refuse plus de 100")
 
 
 def test_received_at() -> None:
@@ -153,7 +213,9 @@ def main() -> int:
     for test in (
         test_match_prefix,
         test_extract_body,
-        test_extract_attachments,
+        test_collect_attachments,
+        test_worth_uploading,
+        test_page_children,
         test_received_at,
         test_body_blocks,
     ):
