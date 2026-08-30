@@ -172,6 +172,21 @@ def extract_body(payload: dict) -> str:
     return text.strip()
 
 
+def extract_attachments(payload: dict) -> list[str]:
+    """Noms des pieces jointes. Un mail « vrac » est souvent une photo sans texte."""
+    names: list[str] = []
+
+    def walk(part: dict) -> None:
+        filename = (part.get("filename") or "").strip()
+        if filename and part.get("body", {}).get("attachmentId"):
+            names.append(filename)
+        for child in part.get("parts", []) or []:
+            walk(child)
+
+    walk(payload)
+    return names
+
+
 def strip_reply_prefixes(subject: str) -> str:
     cleaned = subject
     while True:
@@ -259,7 +274,7 @@ class Notion:
                     "rich_text": [{"text": {"content": entry["message_id"]}}]
                 },
             },
-            "children": body_blocks(entry["body"]),
+            "children": body_blocks(entry["body"], entry["attachments"]),
         }
         if entry["received_at"]:
             payload["properties"]["Date réception"] = {
@@ -268,48 +283,71 @@ class Notion:
         return self._request("POST", "/pages", json=payload)["url"]
 
 
-def body_blocks(body: str) -> list[dict]:
+def paragraph(text: str) -> dict:
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {"rich_text": [{"text": {"content": text}}]},
+    }
+
+
+def body_blocks(body: str, attachments: list[str] | None = None) -> list[dict]:
     """Decoupe le corps du mail en blocs paragraphe acceptes par Notion."""
+    attachments = attachments or []
+
     if not body:
-        return [
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [{"text": {"content": "(Mail sans corps texte.)"}}]
-                },
-            }
-        ]
+        if attachments:
+            # Cas courant : une photo envoyee a soi-meme, sans un mot.
+            note = "(Aucun texte — le mail ne contient que sa ou ses pieces jointes.)"
+        else:
+            note = "(Mail sans corps texte.)"
+        return [paragraph(note)] + attachment_blocks(attachments)
 
     chunks: list[str] = []
-    for paragraph in body.split("\n\n"):
-        paragraph = paragraph.strip()
-        if not paragraph:
+    for block in body.split("\n\n"):
+        block = block.strip()
+        if not block:
             continue
-        while len(paragraph) > NOTION_TEXT_CHUNK:
-            cut = paragraph.rfind("\n", 0, NOTION_TEXT_CHUNK)
+        while len(block) > NOTION_TEXT_CHUNK:
+            cut = block.rfind("\n", 0, NOTION_TEXT_CHUNK)
             if cut <= 0:
-                cut = paragraph.rfind(" ", 0, NOTION_TEXT_CHUNK)
+                cut = block.rfind(" ", 0, NOTION_TEXT_CHUNK)
             if cut <= 0:
                 cut = NOTION_TEXT_CHUNK
-            chunks.append(paragraph[:cut].strip())
-            paragraph = paragraph[cut:].strip()
-        if paragraph:
-            chunks.append(paragraph)
+            chunks.append(block[:cut].strip())
+            block = block[cut:].strip()
+        if block:
+            chunks.append(block)
 
     truncated = len(chunks) > NOTION_MAX_BLOCKS
     chunks = chunks[:NOTION_MAX_BLOCKS]
     if truncated:
         chunks.append("(…) Corps du mail tronque — ouvrir le lien Gmail pour la suite.")
 
-    return [
+    return [paragraph(chunk) for chunk in chunks] + attachment_blocks(attachments)
+
+
+def attachment_blocks(attachments: list[str]) -> list[dict]:
+    """Liste les pieces jointes : le fichier reste dans Gmail, mais il est signale."""
+    if not attachments:
+        return []
+    blocks = [
         {
             "object": "block",
-            "type": "paragraph",
-            "paragraph": {"rich_text": [{"text": {"content": chunk}}]},
+            "type": "heading_3",
+            "heading_3": {"rich_text": [{"text": {"content": "Pièces jointes"}}]},
         }
-        for chunk in chunks
     ]
+    blocks += [
+        {
+            "object": "block",
+            "type": "bulleted_list_item",
+            "bulleted_list_item": {"rich_text": [{"text": {"content": name[:2000]}}]},
+        }
+        for name in attachments[:20]
+    ]
+    blocks.append(paragraph("Fichiers consultables via le lien Gmail de cette page."))
+    return blocks
 
 
 # --------------------------------------------------------------------------
@@ -393,6 +431,7 @@ def run(args: argparse.Namespace) -> int:
         name, address = parseaddr(sender)
         sender_label = f"{name} <{address}>" if name else (address or sender)
         body = extract_body(payload)[:max_body]
+        attachments = extract_attachments(payload)
         entry = {
             "title": title,
             "sender": sender_label,
@@ -400,10 +439,12 @@ def run(args: argparse.Namespace) -> int:
             "link": f"https://mail.google.com/mail/u/0/#all/{message.get('threadId', stub['id'])}",
             "message_id": stub["id"],
             "body": body,
+            "attachments": attachments,
         }
 
         if args.dry_run:
-            log(f"[essai] « {title} » — de {sender_label} (aucune ecriture)")
+            joined = f" + {len(attachments)} piece(s) jointe(s)" if attachments else ""
+            log(f"[essai] « {title} » — de {sender_label}{joined} (aucune ecriture)")
             imported += 1
             continue
 

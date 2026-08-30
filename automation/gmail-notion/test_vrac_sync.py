@@ -83,6 +83,38 @@ def test_extract_body() -> None:
     check("extract_body sans corps", v.extract_body({"mimeType": "text/plain"}), "")
 
 
+def test_extract_attachments() -> None:
+    # Cas reel : mail « Vrac - finalisation vrac e-mail » — une photo, aucun texte.
+    photo_only = {
+        "mimeType": "multipart/mixed",
+        "parts": [
+            {"mimeType": "text/plain", "filename": "", "body": {"size": 0}},
+            {
+                "mimeType": "image/jpeg",
+                "filename": "88983.jpg",
+                "body": {"attachmentId": "ANGjdJ", "size": 1280000},
+            },
+        ],
+    }
+    check("extract_attachments photo seule", v.extract_attachments(photo_only), ["88983.jpg"])
+    check("extract_body photo seule", v.extract_body(photo_only), "")
+
+    blocks = v.body_blocks(v.extract_body(photo_only), v.extract_attachments(photo_only))
+    types = [b["type"] for b in blocks]
+    check(
+        "body_blocks signale la piece jointe",
+        types,
+        ["paragraph", "heading_3", "bulleted_list_item", "paragraph"],
+    )
+
+    # Un corps de texte sans piece jointe ne doit pas gagner de section parasite.
+    check(
+        "body_blocks sans piece jointe",
+        [b["type"] for b in v.body_blocks("du texte", [])],
+        ["paragraph"],
+    )
+
+
 def test_received_at() -> None:
     dated = {"headers": [{"name": "Date", "value": "Sat, 29 Aug 2026 09:12:00 +0200"}]}
     check("received_at depuis l'en-tete", v.received_at(dated, None), "2026-08-29T09:12:00+02:00")
@@ -118,7 +150,13 @@ def test_body_blocks() -> None:
 
 
 def main() -> int:
-    for test in (test_match_prefix, test_extract_body, test_received_at, test_body_blocks):
+    for test in (
+        test_match_prefix,
+        test_extract_body,
+        test_extract_attachments,
+        test_received_at,
+        test_body_blocks,
+    ):
         test()
     if failures:
         print(f"{len(failures)} echec(s) :\n")

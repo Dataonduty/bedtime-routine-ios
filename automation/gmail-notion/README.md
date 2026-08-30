@@ -39,6 +39,17 @@ milieu, on risque un doublon (rattrapé par le filet) plutôt qu'un mail perdu.
 Le corps du mail est recopié dans le contenu de la page (texte brut de
 préférence, sinon HTML détagué), tronqué à `MAX_BODY_CHARS`.
 
+### Pièces jointes
+
+Les **noms** des pièces jointes sont listés en bas de la page ; les fichiers
+eux-mêmes restent dans Gmail, accessibles via le lien de la page. Un mail sans
+texte mais avec une photo — le cas du « je me photographie un truc et je me
+l'envoie » — donne donc une entrée explicite plutôt qu'une page vide.
+
+Téléverser réellement les fichiers dans Notion est possible (API *file upload*,
+en trois appels par fichier) mais n'est pas fait : ça alourdirait la base et
+dupliquerait un stockage que Gmail assure déjà.
+
 ## Installation sur le Pi
 
 ```bash
@@ -125,6 +136,10 @@ partagée, déclenche les protections anti-abus de Google sur le compte.
 | `invalid_grant` au refresh | Mot de passe Google changé, ou appli OAuth restée en mode *Test* (jeton à 7 jours) → publier l'appli ou relancer `authorize.py` |
 | Un mail correspondant est ignoré | Il porte déjà le label ; ou il est plus vieux que la fenêtre ; ou l'objet ne **commence** pas par le préfixe |
 | Doublons dans Notion | Label retiré manuellement ET `ID message` modifié |
+| Page Notion sans contenu | Mail sans corps ni pièce jointe |
+
+Les mails que l'on s'envoie à soi-même portent le label `SENT` : ils sont bien
+pris en compte, la recherche ne se limite pas à la boîte de réception.
 
 Journal : `~/vrac-notion/vrac-sync.log`. Cron : `crontab -l`.
 
