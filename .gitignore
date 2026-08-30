@@ -12,3 +12,10 @@ DerivedData/
 *.p12
 *.mobileprovision
 ExportOptions.local.plist
+
+# Automatisation Gmail -> Notion (dossier automation/gmail-notion)
+automation/gmail-notion/.venv/
+automation/gmail-notion/.env
+automation/gmail-notion/credentials.json
+automation/gmail-notion/token.json
+automation/gmail-notion/*.log
